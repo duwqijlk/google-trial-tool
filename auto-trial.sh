@@ -203,9 +203,11 @@ run_frida() {
     # Clear logcat BEFORE injection so we don't lose early output
     "$ADB" -s "$DEVICE" logcat -c 2>/dev/null || true
 
-    # Run frida in background (stdin from /dev/null to prevent REPL blocking)
+    # Run frida in background (stdin from /dev/null to prevent REPL blocking).
+    # Output goes to a file, not /dev/null: on Windows (Git Bash) the frida CLI
+    # never injects when stdout is NUL.
     frida -H "127.0.0.1:$FRIDA_LOCAL_PORT" -p "$pid" -l "$tmp_script" \
-        </dev/null >/dev/null 2>&1 &
+        </dev/null >"$tmp_script.log" 2>&1 &
     FRIDA_PID=$!
 
     # Poll logcat in a loop instead of streaming pipe (avoids indefinite hang)
@@ -222,7 +224,7 @@ run_frida() {
         # Read all AutoTrial messages so far
         local output
         output=$("$ADB" -s "$DEVICE" logcat -d -s "AutoTrial:*" 2>/dev/null \
-            | sed 's/^.*AutoTrial *: *//')
+            | sed 's/^.*AutoTrial *: \{0,1\}//')
 
         [[ -z "$output" ]] && continue
 
@@ -278,7 +280,7 @@ run_frida() {
         err "Timed out after ${max_wait}s — check logcat manually: adb logcat -d -s AutoTrial:*"
     fi
 
-    rm -f "$tmp_script"
+    rm -f "$tmp_script" "$tmp_script.log"
 }
 
 # ===== Cleanup =====
